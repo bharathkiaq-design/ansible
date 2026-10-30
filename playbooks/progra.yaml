@@ -1,0 +1,78 @@
+---
+- name: Install and configure Prometheus and Grafana
+  hosts: prometheus
+  become: true
+
+
+  tasks:
+    - name: Install Docker and Python Docker SDK
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - python3-docker
+        state: present
+        update_cache: true
+
+
+    - name: Start and enable Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+
+    - name: Create Prometheus configuration directory
+      ansible.builtin.file:
+        path: /opt/prometheus
+        state: directory
+        mode: "0755"
+
+
+    - name: Configure Prometheus
+      ansible.builtin.copy:
+        dest: /opt/prometheus/prometheus.yml
+        mode: "0644"
+        content: |
+          global:
+            scrape_interval: 15s
+
+
+          scrape_configs:
+            - job_name: prometheus
+              static_configs:
+                - targets: ["localhost:9090"]
+
+
+    - name: Create Prometheus data volume
+      community.docker.docker_volume:
+        name: prometheus_data
+
+
+    - name: Run Prometheus container
+      community.docker.docker_container:
+        name: prometheus
+        image: prom/prometheus:latest
+        state: started
+        restart_policy: unless-stopped
+        published_ports:
+          - "9090:9090"
+        volumes:
+          - /opt/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+          - prometheus_data:/prometheus
+
+
+    - name: Create Grafana data volume
+      community.docker.docker_volume:
+        name: grafana_data
+
+
+    - name: Run Grafana container
+      community.docker.docker_container:
+        name: grafana
+        image: grafana/grafana:latest
+        state: started
+        restart_policy: unless-stopped
+        published_ports:
+          - "3000:3000"
+        volumes:
+          - grafana_data:/var/lib/grafana

@@ -1,0 +1,64 @@
+---
+- name: Install SonarQube on EC2
+  hosts: harbor
+  become: yes
+
+  vars:
+    sonarqube_version: "community"
+
+  tasks:
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - curl
+          - unzip
+        state: present
+
+    - name: Enable Docker
+      service:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Set vm.max_map_count
+      sysctl:
+        name: vm.max_map_count
+        value: "524288"
+        state: present
+        reload: yes
+
+    - name: Create SonarQube directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /opt/sonarqube
+        - /opt/sonarqube/data
+        - /opt/sonarqube/logs
+        - /opt/sonarqube/extensions
+
+    - name: Pull SonarQube image
+      docker_image:
+        name: sonarqube
+        tag: community
+        source: pull
+
+    - name: Run SonarQube container
+      docker_container:
+        name: sonarqube
+        image: sonarqube:community
+        state: started
+        restart_policy: always
+        published_ports:
+          - "9000:9000"
+        volumes:
+          - /opt/sonarqube/data:/opt/sonarqube/data
+          - /opt/sonarqube/logs:/opt/sonarqube/logs
+          - /opt/sonarqube/extensions:/opt/sonarqube/extensions

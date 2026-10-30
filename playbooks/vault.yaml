@@ -1,0 +1,67 @@
+---
+- name: Install and configure Vault
+  hosts: harbor
+  become: true
+
+
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - gpg
+          - wget
+        state: present
+        update_cache: true
+
+
+    - name: Download HashiCorp GPG key
+      ansible.builtin.get_url:
+        url: https://apt.releases.hashicorp.com/gpg
+        dest: /tmp/hashicorp.asc
+        mode: '0644'
+
+
+    - name: Install HashiCorp repository key
+      ansible.builtin.command:
+        cmd: gpg --dearmor --yes -o /usr/share/keyrings/hashicorp-archive-keyring.gpg /tmp/hashicorp.asc
+        creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+
+    - name: Add HashiCorp repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        state: present
+        filename: hashicorp
+
+
+    - name: Install Vault
+      ansible.builtin.apt:
+        name: vault
+        state: present
+        update_cache: true
+
+
+    - name: Configure Vault for local lab
+      ansible.builtin.copy:
+        dest: /etc/vault.d/vault.hcl
+        owner: vault
+        group: vault
+        mode: '0640'
+        content: |
+          ui = true
+          disable_mlock = true
+          storage "file" {
+            path = "/opt/vault/data"
+          }
+          listener "tcp" {
+            address = "0.0.0.0:8200"
+            tls_disable = 1
+          }
+          api_addr = "http://127.0.0.1:8200"
+
+
+    - name: Enable and start Vault
+      ansible.builtin.service:
+        name: vault
+        state: started
+        enabled: true

@@ -1,0 +1,102 @@
+---
+- name: Install and Configure Harbor
+  hosts: harbor
+  become: true
+
+
+  vars:
+    harbor_version: "v2.15.4"
+    harbor_admin_password: "HarborLab_821!Secure"
+
+
+  tasks:
+
+
+    - name: Update package cache
+      apt:
+        update_cache: yes
+
+
+    - name: Install Docker and dependencies
+      apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+          - openssl
+        state: present
+
+
+    - name: Start and enable Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+
+    - name: Create Harbor download directory
+      file:
+        path: /opt/harbor-download
+        state: directory
+        mode: '0755'
+
+
+    - name: Download Harbor installer
+      get_url:
+        url: "https://github.com/goharbor/harbor/releases/download/{{ harbor_version }}/harbor-online-installer-{{ harbor_version }}.tgz"
+        dest: /tmp/harbor-installer.tgz
+        mode: '0644'
+
+
+    - name: Extract Harbor installer
+      unarchive:
+        src: /tmp/harbor-installer.tgz
+        dest: /opt/harbor-download
+        remote_src: yes
+
+
+    - name: Create harbor.yml from template
+      copy:
+        src: /opt/harbor-download/harbor/harbor.yml.tmpl
+        dest: /opt/harbor-download/harbor/harbor.yml
+        remote_src: yes
+        force: no
+
+
+    - name: Configure Harbor hostname
+      lineinfile:
+        path: /opt/harbor-download/harbor/harbor.yml
+        regexp: '^hostname:'
+        line: "hostname: {{ ansible_host }}"
+
+
+    - name: Configure Harbor admin password
+      lineinfile:
+        path: /opt/harbor-download/harbor/harbor.yml
+        regexp: '^harbor_admin_password:'
+        line: "harbor_admin_password: {{ harbor_admin_password }}"
+      no_log: true
+
+
+    - name: Run Harbor prepare
+      command:
+        cmd: ./prepare
+        chdir: /opt/harbor-download/harbor
+
+
+    - name: Install Harbor
+      command:
+        cmd: ./install.sh
+        chdir: /opt/harbor-download/harbor
+      args:
+        creates: /data/registry
+
+
+    - name: Verify Harbor containers
+      command: docker ps
+      register: harbor_containers
+      changed_when: false
+
+
+    - name: Display running containers
+      debug:
+        var: harbor_containers.stdout_lines
